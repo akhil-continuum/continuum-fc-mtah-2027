@@ -1,0 +1,1668 @@
+# Rule registry (football-rules skill). One entry per rule ID in docs/02-football-rulebook.md.
+# Validated by pipeline/rules/registry.py and tests/pipeline/test_rules_registry.py.
+# status: planned | implemented | measured | in_use | dropped
+# tier CASE / encoding TEST: ambiguous cases A1-A24 (synthetic scene targets, not detectors).
+# params: start values as in code; bench numbers from pipeline.restarts.measure.
+
+- id: S1
+  tier: LAW
+  encoding: STATE
+  statement: Every graded frame is H, A or D. There is no contested or unknown state.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: S2
+  tier: LAW
+  encoding: STATE
+  statement: While the ball is live exactly one team has it. A loose ball belongs to the team clearly
+    about to collect it (P30); where none is clear it stays with the last team that had it. (reviewer
+    convention, 14 Nov)
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: S3
+  tier: LAW
+  encoding: STATE
+  statement: A possession never crosses half-time. Each half is decoded on its own.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: S4
+  tier: LAW
+  encoding: MASK, CHECK
+  statement: The second half is graded from before its kick-off. Every frame until that kick-off is D.
+  function: pipeline.restarts.kickoff.pre_kickoff_mask
+  params:
+    mask_column: features_dead.parquet:mask_pre_kickoff
+    check_tol_frames: 25
+  status: measured
+  bench_precision: 0.994
+  bench_coverage: 0.998
+  notes: 'Frame-level precision/coverage of mask_pre_kickoff against frames before each half''s first
+    truth kick-off. Match CHECK against games.py anchor in pipeline.restarts.__main__ (pass/fail only).
+    Fallback (general rule, lead decision 2026-11-13): when no kick-off formation is detected at a half
+    start of a game with organiser-published kick-off frames (games.py; the competition match), that half''s
+    kick-off takes the published frame (evidence published_anchor) and the mask runs from the half''s
+    first graded frame to it. Bench games have no published anchors and keep the detector-only behaviour.
+    Bench 2026-11-13: 12 roots (Metrica games 1-3: clean dev copy plus bench-builder low/high/match noise),
+    pipeline.restarts.measure; roots share 3 underlying games, so not independent.'
+- id: S5
+  tier: LAW
+  encoding: STATE
+  statement: The first half starts live at its kick-off, with the kicking-off team in possession.
+  function: pipeline.restarts.kickoff.apply_kickoff_law
+  params: {}
+  status: measured
+  bench_precision: 1.0
+  bench_coverage: 1.0
+  notes: 'First-half kick-off row gives the kicking team (p_home_restart); decoder STATE pending. Half-start
+    kicking team correct 24/24 (incl. 3 assumed half starts whose team comes from S6). Bench 2026-11-13:
+    12 roots (Metrica games 1-3: clean dev copy plus bench-builder low/high/match noise), pipeline.restarts.measure;
+    roots share 3 underlying games, so not independent.'
+- id: S6
+  tier: LAW
+  encoding: STATE
+  statement: The team that did not kick off the first half kicks off the second.
+  function: pipeline.restarts.kickoff.apply_kickoff_law
+  params:
+    VOTE_LLR_MAX: 4.6
+    VOTE_EFFECTIVE_FRAMES: 25
+  status: measured
+  bench_precision: 1.0
+  bench_coverage: 1.0
+  notes: 'Both half-start formation votes combined: llr(home kicks off h1) = llr_h1 - llr_h2; p_home of
+    the two rows sums to 1. 24/24 half-start teams. Bench 2026-11-13: 12 roots (Metrica games 1-3: clean
+    dev copy plus bench-builder low/high/match noise), pipeline.restarts.measure; roots share 3 underlying
+    games, so not independent.'
+- id: S7
+  tier: LAW
+  encoding: FEAT
+  statement: Teams change ends at half-time. Attack direction flips.
+  function: pipeline.restarts.formation.derive_attack_direction
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Derived per half from the keepers'' positions".
+    Load stage writes attack_direction; this is the fallback used when meta.json lacks it (bench-builder
+    noisy roots). Rulebook says keepers; implementation uses team centroids (majority per half).'
+- id: S8
+  tier: LAW
+  encoding: STATE
+  statement: Dead ball has no owner. D is D whoever restarts.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Two hidden dead states both write D".'
+- id: S9
+  tier: LAW
+  encoding: STATE
+  statement: 'Possessions can be shorter than one second: a deliberate play of the ball gives possession
+    however briefly (P21). The labels are frame-accurate, not smoothed to phases of play, so a version
+    that suppresses sub-second possessions disagrees with the definition. There is no minimum of a second
+    or more. (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Minimum length is a small bench-chosen value".'
+- id: S10
+  tier: STRONG
+  encoding: STATE
+  statement: 'A stoppage is never shorter than the time it takes to restart. Start value: 2 s.'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: S11
+  tier: CLUE
+  encoding: CHECK
+  statement: 'Expected totals for a full match: 35 to 50 percent of graded frames dead; 90 to 110 stoppages;
+    3 to 5 possessions per minute of graded time.'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: R0
+  tier: LAW
+  encoding: STATE
+  statement: The first live frame after any stoppage belongs to the team taking the restart. The decoder
+    has two dead states, D→H and D→A; each may only exit to its own team.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: Restart team for kick-offs is written as p_home_restart in restarts.parquet; the two dead states
+    are decoder structure (decoder-engineer).
+- id: R1
+  tier: LAW
+  encoding: EVENT
+  statement: 'Throw-in: taken by opponents of the last team to touch the ball; live when it is released
+    and enters the pitch'
+  function: pipeline.restarts.stoppages.type_and_team
+  params:
+    TOUCH_ZONE_M: 1.5
+    LLR_LAST_TOUCH: 1.7
+    L2_LEAD_FRAMES: 0
+  status: measured
+  bench_precision: 0.82
+  bench_coverage: 0.89
+  notes: Tier and encoding not stated in the rulebook R1-R7 table; LAW (who restarts) and EVENT (formation
+    detector) assumed. Bench 2026-11-14, pipeline.restarts.measure_stoppages against bench-builder stoppages.csv
+    on the rebuilt match-level roots metrica_g1..g3_match (events computed in memory); low / high / clean
+    dev_g3_clean in notes. Coverage = recall of truth throw-ins 98/110; precision field = restart-team
+    accuracy on decided throw-ins 78/95 (low 70/95, high 64/95, clean 44/49); type right on 93/98 matched.
+- id: R2
+  tier: LAW
+  encoding: EVENT
+  statement: 'Goal kick: taken by defending team (attackers touched it last over the goal line, no goal);
+    live when it is kicked and clearly moves'
+  function: pipeline.restarts.stoppages.type_and_team
+  params:
+    GOAL_AREA_DEPTH_M: 5.5
+    GOAL_AREA_HALF_W: 9.16
+    LLR_END: 2.2
+  status: measured
+  bench_precision: 0.78
+  bench_coverage: 0.87
+  notes: Tier and encoding not stated in the rulebook R1-R7 table; LAW (who restarts) and EVENT (formation
+    detector) assumed. Bench 2026-11-14, pipeline.restarts.measure_stoppages against bench-builder stoppages.csv
+    on the rebuilt match-level roots metrica_g1..g3_match (events computed in memory); low / high / clean
+    dev_g3_clean in notes. Recall 41/47; restart-team accuracy (precision field) 29/37; type right 29/41.
+- id: R3
+  tier: LAW
+  encoding: EVENT
+  statement: 'Corner: taken by attacking team (defenders touched it last); live when it is kicked and
+    moves'
+  function: pipeline.restarts.stoppages.type_and_team
+  params:
+    CORNER_ZONE_M: 3.0
+    BOX_DEPTH_M: 16.5
+    BOX_HALF_W: 20.16
+    LLR_END: 2.2
+  status: measured
+  bench_precision: 0.83
+  bench_coverage: 1.0
+  notes: Tier and encoding not stated in the rulebook R1-R7 table; LAW (who restarts) and EVENT (formation
+    detector) assumed. Bench 2026-11-14, pipeline.restarts.measure_stoppages against bench-builder stoppages.csv
+    on the rebuilt match-level roots metrica_g1..g3_match (events computed in memory); low / high / clean
+    dev_g3_clean in notes. Recall 26/26; restart-team accuracy (precision field) 20/24; type right 16/26
+    (others called goal kick or free kick).
+- id: R4
+  tier: LAW
+  encoding: EVENT
+  statement: 'Free kick: taken by the fouled team, or the defending team for offside; live when it is
+    kicked and moves'
+  function: pipeline.restarts.stoppages.type_and_team
+  params:
+    FREE_KICK_CLEAR_M: 7.0
+    FREE_KICK_TAKER_M: 2.0
+  status: measured
+  bench_precision: 0.96
+  bench_coverage: 0.88
+  notes: Tier and encoding not stated in the rulebook R1-R7 table; LAW (who restarts) and EVENT (formation
+    detector) assumed. Bench 2026-11-14, pipeline.restarts.measure_stoppages against bench-builder stoppages.csv
+    on the rebuilt match-level roots metrica_g1..g3_match (events computed in memory); low / high / clean
+    dev_g3_clean in notes. Free kick is the fallback type. Recall 81/92; restart-team accuracy (precision
+    field) 64/67; type right 73/81.
+- id: R5
+  tier: LAW
+  encoding: EVENT
+  statement: 'Penalty: taken by the fouled (attacking) team; live when it is kicked and moves forward'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: Tier and encoding not stated in the rulebook R1-R7 table; LAW (who restarts) and EVENT (formation
+    detector) assumed.
+- id: R6
+  tier: LAW
+  encoding: EVENT
+  statement: 'Kick-off: taken by the team that conceded; S5 and S6 for the halves; live when it is kicked
+    and moves'
+  function: pipeline.restarts.kickoff.detect_kickoffs
+  params:
+    SPOT_RADIUS_M: 1.5
+    DEF_RING_MIN: 2
+    BALL_SPOT_M: 3.0
+    KO_MAX_WRONG_HALF: 1
+    MIN_TRACKED: 12
+    SMOOTH_FRAMES: 25
+    SMOOTH_SHARE: 0.6
+    MERGE_GAP_FRAMES: 50
+    MIN_HOLD_FRAMES: 25
+    MIN_HOLD_AT_HALF_START: 10
+    HALF_START_SLACK: 25
+    BREAK_CONFIRM_FRAMES: 125
+    BREAK_CONFIRM_SHARE: 0.8
+    KICKER_MIN_SHARE: 0.1
+    MIN_KICKOFF_SPACING: 1500
+    LIVE_MIXED_MIN: 4
+    LIVE_MIXED_FRAMES: 750
+    LIVE_SPLIT_FRAMES: 125
+    CENTRE_CIRCLE_M: 9.15
+    CIRCLE_MARGIN_M: 1.0
+    HALF_TOL_M: 1.0
+    RING_M: 12.0
+  status: measured
+  bench_precision: 1.0
+  bench_coverage: 0.824
+  notes: 'Tier and encoding not stated in the rulebook R1-R7 table; LAW (who restarts) and EVENT (formation
+    detector) assumed. Rebuilt match-like roots (2026-11-14, 9 roots metrica_g1..g3_low/match/high): 42
+    formation detections, 0 false, coverage 42/51 (3 more are game 1 first half, assumed); timing |err|
+    p90 15 frames, 40/42 within 25; half-start team 18/18, goal kick-off team 26/27. Earlier (old noise):
+    Bench 2026-11-13: 12 roots (Metrica games 1-3: clean dev copy plus bench-builder low/high/match noise),
+    pipeline.restarts.measure; roots share 3 underlying games, so not independent. Precision 57/58 formation
+    detections; coverage 57/63 truth kick-offs (3 of the 6 misses are the game 1 first-half kick-off,
+    taken before tracking starts, then assumed at the half start). False 0.05/hour. Instant |err| median
+    3, p90 8, max 17 frames. Ball removed: 56/57, coverage 0.889, same timing.'
+- id: R7
+  tier: LAW
+  encoding: EVENT
+  statement: 'Dropped ball: taken by the team that last touched it; the keeper if inside a penalty area;
+    live when it touches the ground'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: Tier and encoding not stated in the rulebook R1-R7 table; LAW (who restarts) and EVENT (formation
+    detector) assumed.
+- id: R8
+  tier: LAW
+  encoding: EVENT
+  statement: Last team to touch before the ball crosses a line loses the restart, except a goal.
+  function: pipeline.events.exits._last_touch
+  params:
+    last_touch_s: 10.0
+    last_near_m: 2.0
+    contact_fallback: false
+  status: measured
+  bench_precision: 0.915
+  bench_coverage: 0.986
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: last_touch_team agreement on matched
+    exits: 0.915 clean, 0.785 noisy'
+- id: R9
+  tier: LAW
+  encoding: EVENT
+  statement: 'Where the ball went out fixes the restart type: touchline → throw-in; goal line outside
+    the posts → corner or goal kick; between the posts → goal and kick-off.'
+  function: pipeline.restarts.stoppages.type_and_team
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: Type from the exit line; goal-mouth exits become kick-off stoppages merged with the detected
+    kick-off.
+- id: R10
+  tier: LAW
+  encoding: EVENT, COST
+  statement: 'Over the goal line, not a goal: last touch by the defending side → corner to attackers;
+    last touch by attackers → goal kick.'
+  function: pipeline.restarts.stoppages.type_and_team
+  params:
+    LLR_END: 2.2
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: Corner vs goal kick from last touch team vs the team attacking that goal line (attack_direction).
+    Measured through R2/R3.
+- id: R11
+  tier: STRONG
+  encoding: CHECK
+  statement: The restart is taken from where the ball went out (throw-in), the corner nearest the exit
+    (corner), anywhere in the goal area (goal kick), or the place of the offence (free kick). A stationary
+    ball far from any legal spot is not a restart.
+  function: pipeline.restarts.stoppages._type_from_place
+  params:
+    TOUCH_ZONE_M: 1.5
+    CORNER_ZONE_M: 3.0
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: Type from the restart position when no exit is known.
+- id: R12
+  tier: STRONG
+  encoding: EVENT, COST
+  statement: The lone player standing next to a stationary ball at a legal restart spot belongs to the
+    restarting team.
+  function: pipeline.restarts.stoppages.type_and_team
+  params:
+    NEAR_RESTART_M: 3.0
+    LLR_NEAR: 0.85
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: Nearest-player team at the restart ball adds LLR_NEAR (CLUE); not measured separately.
+- id: R13
+  tier: LAW
+  encoding: STATE
+  statement: After a goal the conceding team kicks off.
+  function: pipeline.restarts.kickoff.detect_kickoffs
+  params: {}
+  status: measured
+  bench_precision: 0.972
+  bench_coverage: 1.0
+  notes: 'Goal kick-off taker from the formation vote (player at the spot), not from goal detection (D4
+    not built). 35/36 matched goal kick-offs right; the one miss had no taker vote (p=0.5). Bench 2026-11-13:
+    12 roots (Metrica games 1-3: clean dev copy plus bench-builder low/high/match noise), pipeline.restarts.measure;
+    roots share 3 underlying games, so not independent.'
+- id: R14
+  tier: STRONG
+  encoding: COST
+  statement: 'Smart Tagging SET PIECES with a team: that team restarts. Throw-ins have no team; use R8.'
+  function: pipeline.tagging.votes.restart_windows
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'restart_team per frame; throw-ins have no team (-1). Agreement with p_home_restart is in the G10 table. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: R15
+  tier: LAW
+  encoding: EVENT
+  statement: A penalty is a restart for the attacking team even though the ball is deep in the defenders'
+    area.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: R16
+  tier: STRONG
+  encoding: EVENT
+  statement: Offside free kicks go to the defending team and are taken well inside their half, often by
+    the keeper or a centre-back, with the attackers walking back.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: R17
+  tier: CLUE
+  encoding: STATE
+  statement: A quick free kick or quick throw can restart in under 3 s with players still out of position.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Keeps S10''s minimum low".'
+- id: D1
+  tier: LAW
+  encoding: EVENT
+  statement: The ball is out when all of it crosses a touchline or goal line, on the ground or in the
+    air. The labels start D at about the crossing, slightly after it where the assistant's signal is
+    the cue and slightly before it where the ball is plainly running out unreachable (D15). (reviewer
+    convention, 14 Nov)
+  function: pipeline.events.exits.exits
+  params:
+    margin_m: 0.3
+  status: measured
+  bench_precision: 0.973
+  bench_coverage: 0.986
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: line agreement 0.986 clean, 0.908 noisy'
+- id: D2
+  tier: STRONG
+  encoding: EVENT
+  statement: A tracked ball outside the lines is evidence of D only if it stays out for several frames
+    or disappears while out.
+  function: pipeline.events.exits.exits
+  params:
+    persist_frames: 8
+    vanish_frames: 25
+    bridge_frames: 5
+    entry_frames: 12
+    persist_depth_m: 1.0
+    feet_m: 0.75
+    feet_share: 0.75
+    trap_max_frames: 25
+    trap_return_frames: 12
+    trap_speed_mps: 8.0
+    reappear_max_frames: 75
+  status: measured
+  bench_precision: 0.973
+  bench_coverage: 0.986
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: all exit kinds together: noisy P 0.915
+    R 0.903; last touch team 0.915 clean, 0.785 noisy'
+- id: D3
+  tier: STRONG
+  encoding: EVENT
+  statement: A ball last seen within a few metres of a line, moving outwards fast enough to cross it,
+    that then goes missing has probably gone out.
+  function: pipeline.events.exits._extrapolated
+  params:
+    max_dist_m: 5.0
+    min_out_mps: 2.0
+    max_time_s: 1.0
+    min_gap_frames: 50
+  status: measured
+  bench_precision: 0.5
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: clean 2 of 4 match an exit, the other
+    2 fall on fouls; noisy 3 of 8 bench_precision: below 0.9: demote to CLUE (COST) until measured on
+    more games Precision 0.5 is below 0.9: weight as CLUE (small cost), not STRONG, until measured on
+    more games.'
+- id: D4
+  tier: LAW
+  encoding: EVENT
+  statement: 'Goal: the ball crosses the goal line between the posts. Dead until the kick-off, usually
+    45 to 90 s.'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: D5
+  tier: STRONG
+  encoding: FEAT, EVENT
+  statement: A foul stops play at the whistle, not at the foul. Tracking shows no whistle; the trace is
+    players stopping their runs together, so D is dated at that collective stop. The signs are a sharp
+    collective slow-down within about 2 s, the ball stopping or being picked up, one or more players
+    stationary (on the ground), and a free-kick set-up afterwards. (reviewer convention, 14 Nov)
+  function: pipeline.restarts.stoppages.slowdown_candidates
+  params:
+    JOG_MPS: 2.0
+    SHARE_WINDOW: 25
+    SLOW_BEFORE_FRAMES: 50
+    SLOW_BEFORE_MIN: 0.35
+    SLOW_AFTER_FROM: 25
+    SLOW_AFTER_TO: 100
+    SLOW_AFTER_MAX: 0.15
+    SLOW_BALL_MPS: 1.0
+    SLOW_LAG_FRAMES: 25
+    SLOW_MIN_STOP_FRAMES: 125
+  status: measured
+  bench_precision: 0.5
+  bench_coverage: null
+  notes: 'Bench 2026-11-14, pipeline.restarts.measure_stoppages against bench-builder stoppages.csv on
+    the rebuilt match-level roots metrica_g1..g3_match (events computed in memory); low / high / clean
+    dev_g3_clean in notes. Slow-down-only stoppages: 3/6 match level, 1/1 low, 3/7 high; most whistle
+    stoppages are found through the gap source instead (merged). Below 0.9: CLUE weight (low conf 0.5).'
+- id: D6
+  tier: LAW
+  encoding: NONE
+  statement: 'Advantage: a foul with no whistle. Play continues, so no D, and the ball stays with the
+    fouled team until the whistle (the referee waiting to see an advantage is not a stoppage). (reviewer
+    convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Nothing; D5 needs the slow-down".'
+- id: D7
+  tier: STRONG
+  encoding: FEAT, EVENT
+  statement: 'Offside: dead from about the whistle, not from the flag. Play stops shortly after a forward
+    pass, attackers stop running, defenders step up and stop. (reviewer convention, 14 Nov)'
+  function: pipeline.restarts.stoppages.slowdown_candidates
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Same detector as D5". Same detector as D5; offside
+    not measured separately (3 offsides per game).'
+- id: D8
+  tier: CLUE
+  encoding: FEAT, EVENT
+  statement: Play can also stop for an injury, the ball hitting the referee, or a second ball on the pitch.
+    Restart is a dropped ball.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "D5 detector".'
+- id: D9
+  tier: STRONG
+  encoding: STATE
+  statement: 'After the whistle the ball often keeps moving: kicked away, rolled to the spot, thrown in
+    from a ball boy. Movement of the ball during a stoppage is not play.'
+  function: pipeline.restarts.stoppages.find_restart
+  params:
+    RESUME_FRAMES: 50
+    RESUME_SHARE: 0.08
+    RESTART_TRAVEL_M: 6.0
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: Ball movement with the players standing (share moving below RESUME_SHARE) does not end a stoppage.
+    Synthetic trap test (ball rolled 12 m during a stoppage).
+- id: D10
+  tier: STRONG
+  encoding: FEAT
+  statement: 'Long stoppages (substitutions, treatment, VAR, cooling breaks): players walk, gather at
+    the touchline or benches, the number of tracked players changes.'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: D11
+  tier: STRONG
+  encoding: FEAT
+  statement: 'Goal celebration: several players of one team sprint to a corner or touchline and cluster;
+    the other team walks to the centre.'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: D12
+  tier: CLUE
+  encoding: FEAT
+  statement: The ball going missing is evidence of D that depends on context.
+  function: pipeline.features.missing_context
+  params:
+    loss_radius_m: 3.0
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound).'
+- id: D13
+  tier: STRONG
+  encoding: PSEUDO
+  statement: 'A missing ball for longer than a pass or cross can last (start: 6 s) with slow players is
+    very likely D.'
+  function: pipeline.restarts.stoppages.gap_candidates
+  params:
+    GAP_MIN_FRAMES: 50
+    GAP_MOVING_MAX: 0.3
+    GAP_DIP_SHARE: 0.03
+    GAP_DIP_MIN_FRAMES: 100
+    OUT_DIST_M: 5.0
+    OUT_SPEED_MPS: 2.0
+    KEEPER_MAX_FRAMES: 250
+  status: measured
+  bench_precision: 0.9
+  bench_coverage: null
+  notes: Bench 2026-11-14, pipeline.restarts.measure_stoppages against bench-builder stoppages.csv on
+    the rebuilt match-level roots metrica_g1..g3_match (events computed in memory); low / high / clean
+    dev_g3_clean in notes. Gap-source precision 109/121 match level, 104/108 low, 103/116 high, 23/24
+    clean. Gap stoppages are kept at 2 s (not 6 s) when the players are slow during the gap.
+- id: D14
+  tier: LAW
+  encoding: NONE
+  statement: Between the final whistle of a half and the end of the graded frames there is nothing; the
+    graded span ends with the half.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Nothing".'
+- id: D15
+  tier: STRONG
+  encoding: EVENT, SNAP
+  statement: 'Ball out of play: D starts at about the line crossing. The exact offset has no rule to copy:
+    it can be slightly after the crossing (around the assistant''s signal) or slightly before it when
+    the ball is plainly running out and no player can reach it. The offsets are to be measured on the
+    bench, and the metric is forgiving at these edges. (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: Offset is a bench-chosen parameter on the exit event (D1, D3); no number from the public window.
+- id: L1
+  tier: LAW
+  encoding: EVENT, SNAP
+  statement: 'Free kick, corner, goal kick, penalty, kick-off: the labels turn live shortly after the
+    taker strikes the stationary ball (lag to be measured on the bench, not assumed zero). A keeper releasing
+    the ball from the hands is the same: live shortly after the release. The restarting team has the ball
+    from the first live frame (R0). (reviewer convention, 14 Nov)'
+  function: pipeline.restarts.stoppages.find_restart
+  params:
+    MIN_DEAD_FRAMES: 50
+    RESTART_BALL_MPS: 2.5
+    RESTART_TRAVEL_M: 6.0
+    RESUME_SHARE: 0.08
+  status: measured
+  bench_precision: null
+  bench_coverage: 0.895
+  notes: 'Bench 2026-11-14, pipeline.restarts.measure_stoppages against bench-builder stoppages.csv on
+    the rebuilt match-level roots metrica_g1..g3_match (events computed in memory); low / high / clean
+    dev_g3_clean in notes. Restart frame error on matched stoppages: median -3, |err| p90 4 frames (low
+    5, high 12, clean 0). Start error |err| median 7, p90 40.'
+- id: L2
+  tier: LAW
+  encoding: EVENT, SNAP
+  statement: 'Throw-in: live at about the release. The ball is rarely tracked in the hands, so the first
+    tracked frame inside the pitch near the exit point is slightly late. The lead before that frame is
+    to be measured on the bench (the bench value, not a rulebook constant, decides). The same shortly-after-release
+    convention as L1 applies. (reviewer convention, 14 Nov)'
+  function: pipeline.restarts.stoppages.detect_stoppages
+  params:
+    L2_LEAD_FRAMES: 0
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: Rulebook start value 5 frames; bench gives 0 (throw-in restart error -3 vs -8 frames), so 0 is
+    used. Proposed rulebook edit.
+- id: L3
+  tier: STRONG
+  encoding: COST
+  statement: A stoppage ends only with a legal restart. No restart candidate, no exit from D.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: L4
+  tier: CLUE
+  encoding: EVENT
+  statement: 'If the ball is not tracked at the restart, the restart shows as the formation breaking:
+    the still players near the restart spot start moving together, and both teams'' centroids accelerate.'
+  function: pipeline.restarts.stoppages.find_restart
+  params:
+    BREAK_SHARE: 0.3
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Fallback when no moving ball is seen: collective movement resumes.'
+- id: L5
+  tier: STRONG
+  encoding: COST
+  statement: A Smart Tagging SET PIECES window (about 5 s wide) contains a restart.
+  function: pipeline.tagging.votes.restart_windows
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'restart_window per frame. Share of windows holding a detected restart is in the G10 table. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: L6
+  tier: STRONG
+  encoding: SNAP
+  statement: At the instant of a kick-off, corner, penalty or goal kick the formation is fixed by law
+    (R2 to R6), so the last frame the formation still holds is just before the restart.
+  function: pipeline.restarts.kickoff.detect_kickoffs
+  params:
+    INSTANT_FROM: break
+    BREAK_LAG_FRAMES: 17
+    BALL_LAG_FRAMES: 7
+    BALL_LEAVE_M: 2.0
+  status: measured
+  bench_precision: 1.0
+  bench_coverage: 0.905
+  notes: 'Kick-off only so far: restart dated at the players-only formation break minus BREAK_LAG_FRAMES
+    (lag chosen on the bench). Precision = share of matched kick-offs dated within 25 frames (57/57).
+    Bench 2026-11-13: 12 roots (Metrica games 1-3: clean dev copy plus bench-builder low/high/match noise),
+    pipeline.restarts.measure; roots share 3 underlying games, so not independent.'
+- id: P1
+  tier: STRONG
+  encoding: EVENT
+  statement: A player keeps the ball close (within about 1.5 m) and moving with him for a sustained time
+    with no opponent closer.
+  function: pipeline.events.possession.carries
+  params:
+    carry_m: 1.5
+    carry_tight_m: 1.0
+    agree_mps: 4.0
+    jump_m: 1.0
+    carry_min_s: 0.4
+    carry_gap: 3
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: measured only through control below;
+    carry_min_s 0.4 chosen on the bench (start 0.6) Feeds control events (P4), whose precision is 0.58:
+    weight as CLUE, not STRONG.'
+- id: P2
+  tier: STRONG
+  encoding: EVENT
+  statement: A team makes two touches in a row by two different players (a completed pass) with no opponent
+    touch between.
+  function: pipeline.events.possession.passes
+  params:
+    pass_diff_m: 3.0
+    pass_min_m: 3.0
+    pass_min_frames: 3
+    pass_max_s: 5.0
+    run_frames: 10
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). Feeds control events (P4), whose precision is
+    0.58: weight as CLUE, not STRONG.'
+- id: P3
+  tier: STRONG
+  encoding: EVENT, COST
+  statement: 'A keeper catches or gathers the ball in open play: the ball stops relative to a defending
+    player who is the deepest of his team, inside his own penalty area. This is a live switch to the keeper''s
+    team, dated at about the moment the keeper is clearly going to get it (P30), not a stoppage. (reviewer
+    convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P4
+  tier: STRONG
+  encoding: EVENT
+  statement: A player receives a pass from an opponent cleanly and plays on (first touch then carry or
+    pass).
+  function: pipeline.events.possession.controls
+  params:
+    seq_gap_s: 3.0
+  status: measured
+  bench_precision: 0.576
+  bench_coverage: 0.506
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: live switches, +/-10 frames, team must
+    agree. noisy: P 0.466 R 0.336 bench_precision: far below 0.9: CLUE (small switch cost), not a pseudo-label
+    bench_coverage: by length: <1.5 s 0.27, 1.5-4 s 0.41, >4 s 0.59 Control precision 0.58 (clean), 0.47
+    noisy: weight as CLUE (small switch cost), not STRONG and not a pseudo-label.'
+- id: P5
+  tier: STRONG
+  encoding: EVENT
+  statement: A tackler comes away with the ball (the ball then travels with him, P1).
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P6
+  tier: LAW
+  encoding: STATE
+  statement: The team taking a restart has the ball from the restart frame, whatever happens next.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P30
+  tier: STRONG
+  encoding: FEAT, COST, SNAP
+  statement: 'A loose ball belongs to the team clearly about to collect it, dated before its first touch:
+    after a misplaced pass, a failed dribble, a deflection or a rebound the label switches when it is
+    clear that one team''s player will reach the ball first and no opponent can. Clues: ball direction
+    and speed, which players are running onto it, distance of the nearest opponent. The switch is later
+    when players of opposite teams are both close to the ball, earlier when the ball rolls into space
+    with one team''s player nearest. Numbers to be measured on the bench. (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: Evidence feature is a per-team time to reach the ball (proposal P-14); no constant from the public window.
+- id: P31
+  tier: LAW
+  encoding: STATE
+  statement: 'No contested state: every live frame belongs to a team. The labels have no "nobody''s ball"
+    state, so a scramble or a loose ball is resolved by P30 and otherwise held with the last team (S2).
+    The labels are frame-accurate and not smoothed (S9). (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P32
+  tier: STRONG
+  encoding: EVENT
+  statement: 'A challenge that only dislodges the ball does not switch possession on its own. Possession
+    goes to the team that next plays the ball deliberately (P21) or is clearly about to collect it (P30);
+    if the original team collects it, nothing changed (P8). (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P7
+  tier: STRONG
+  encoding: EVENT
+  statement: 'A deflection is not itself control; what decides is where the ball goes next and who is
+    running onto it (P30). A deflection after which the original team keeps the ball, or the ball goes
+    out of play, changes nothing. A pass that strikes an opponent and runs to that opponent''s team-mates,
+    or into space only they can reach, switches possession to the deflecting team at about the deflection.
+    (reviewer convention, 14 Nov)'
+  function: pipeline.events.possession.deflections
+  params:
+    window_s: 2.0
+    keep: 0.5
+    follow_s: 1.0
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: synthetic only; no bench truth for deflections'
+- id: P8
+  tier: STRONG
+  encoding: EVENT
+  statement: 'A block or a tackle that knocks the ball loose, when the original team has it again within
+    a short time (start: to be measured on the bench). See P32. (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P9
+  tier: STRONG
+  encoding: EVENT
+  statement: An incidental touch in the air that is not a deliberate header (a glance, a graze) is a
+    deflection (P7). A header won is P17 and does give possession. (reviewer convention, 14 Nov)
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P10
+  tier: STRONG
+  encoding: EVENT
+  statement: 'A clearance that goes straight out of play: the clearing team has it from the clearance
+    (P19) until the ball goes dead (D15); the other team then restarts (R8). The possession is short,
+    followed by D. (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P11
+  tier: STRONG
+  encoding: EVENT
+  statement: A save that is parried or pushed away. No change on the parry alone; P7 and P30 decide who
+    is clearly about to collect it. (reviewer convention, 14 Nov)
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "P7 logic".'
+- id: P12
+  tier: LAW
+  encoding: NONE
+  statement: The ball hitting the post, bar, corner flag or referee.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Nothing".'
+- id: P13
+  tier: STRONG
+  encoding: EVENT
+  statement: A dribbler pushing the ball several metres ahead, or a defender shielding it; nearest player
+    alone never triggers a switch.
+  function: pipeline.events.possession.passes
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: dribble-push scene: no defender touch,
+    no self-pass'
+- id: P14
+  tier: STRONG
+  encoding: STATE
+  statement: A long pass or cross in flight belongs to the passing team until just before an opponent
+    wins it (P17), not midway through the flight even when the outcome is obvious, and not after the winning
+    touch. (reviewer convention, 14 Nov)
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Holding through flight; ball usually missing".'
+- id: P15
+  tier: LAW
+  encoding: COST
+  statement: 'A scramble: several single touches by both teams in a crowd. Stays with the last team that
+    had it until a deliberate play (P21) or a team clearly about to collect (P30) appears. (reviewer convention,
+    14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Switch dear while 4 or more players are within 3
+    m of the ball".'
+- id: P16
+  tier: STRONG
+  encoding: SNAP
+  statement: 'Dating is never later than the new team''s first touch of the controlling sequence, and
+    never at the moment we became sure. For a loose ball the labels date the switch before that touch
+    (P30); for contact events (P18, P20) at about the contact. "Once control is confirmed" and "at the
+    second touch" are both too late. (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P17
+  tier: STRONG
+  encoding: SNAP
+  statement: A header won gives possession to the winner's team from just before the header, including
+    when the ball then rebounds off an opponent and the other team collects it, and when a team-mate
+    collects the knock-down. The dating is not the control that follows, and not midway through the flight
+    (P14). (reviewer convention, 14 Nov)
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P18
+  tier: STRONG
+  encoding: SNAP
+  statement: A pass cut out by an opponent switches at about the moment of the opponent's contact, not
+    when the pass was struck, even if the ball then goes up and a team-mate secures it. Where the ball
+    is loose and it is already clear who gets it, P30 dates the switch earlier. (reviewer convention,
+    14 Nov)
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P19
+  tier: STRONG
+  encoding: EVENT, SNAP
+  statement: 'A clearance is possession for the clearing team from the clearance, including a blocked
+    clearance up to the block, and including one kicked upfield to nobody. If the original team collects
+    it, nothing changes; if the other team wins it, the switch follows P17, P18 or P30 as the case is.
+    (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P20
+  tier: STRONG
+  encoding: SNAP
+  statement: A tackle that sends the ball towards the tackler's team-mates, or a one-touch interception
+    that goes on to a team-mate, switches at about the contact, even before a team-mate's touch. (reviewer
+    convention, 14 Nov)
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: P21
+  tier: STRONG
+  encoding: EVENT
+  statement: 'A player who deliberately plays the ball (a pass under pressure, a toe-poke to a team-mate,
+    a clearance, a header that is won) gives their team possession from that play, however brief, even
+    if the ball is lost again almost at once. There is no minimum length and no third state (P31). What
+    does not count on its own: a challenge that only knocks the ball away (P32). (reviewer convention,
+    14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Decides how short P1 may be".'
+- id: P22
+  tier: STRONG
+  encoding: EVENT, PSEUDO
+  statement: 'Keeper holding the ball. Live, his team''s possession (the switch comes at the gather, P3),
+    for up to about 6 to 10 s. (reviewer convention, 14 Nov) Signs:
+    ball still or missing, one defender deepest of his team inside his own area with it, opponents jogging
+    away, team-mates pushing out. No one else is still, nothing is being set up.'
+  function: pipeline.restarts.stoppages.frame_measures
+  params:
+    KEEPER_BALL_M: 1.5
+    KEEPER_BALL_MPS: 1.5
+    KEEPER_MAX_FRAMES: 250
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: keeper_hold per frame (deepest player in own box with the ball, ball slow); blocks gap starts
+    and slow-downs. Synthetic trap test; no bench truth.
+- id: P23
+  tier: STRONG
+  encoding: COST
+  statement: A defender standing on the ball under no pressure, or walking it out. Live.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Still ball inside the pitch away from any restart
+    spot, no slow-down beforehand → not D".'
+- id: P24
+  tier: STRONG
+  encoding: FEAT
+  statement: 'Slow build-up: centre-backs passing sideways while most players walk. Live. Mean player
+    speed alone cannot separate this from a stoppage.'
+  function: pipeline.restarts.stoppages.slowdown_candidates
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "D5 needs the *drop* in speed and a restart set-up,
+    not low speed itself". Slow-down needs a drop from SLOW_BEFORE_MIN; slow build-up without a drop is
+    not a stoppage. Synthetic trap test.'
+- id: P25
+  tier: CLUE
+  encoding: FEAT
+  statement: Ball stuck under a pile of players at a corner or scramble. Live until a whistle.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Missing ball in a crowd is weak D evidence (D12)".'
+- id: P26
+  tier: STRONG
+  encoding: STATE
+  statement: Ball kicked or rolled after the whistle, or passed back to the restart spot.
+  function: pipeline.restarts.stoppages.find_restart
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "D9". See D9.'
+- id: P27
+  tier: STRONG
+  encoding: COST
+  statement: A player walking with the ball to a corner or throw-in spot.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Ball moving at walking pace towards a restart spot
+    while everyone else is slow → D".'
+- id: P28
+  tier: CLUE
+  encoding: FEAT
+  statement: A replacement ball thrown on from the side while the first is still tracked somewhere, or
+    the tracker jumping between two balls.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Ball jumps > 15 m between consecutive seen frames
+    → treat as unreliable".'
+- id: P29
+  tier: CLUE
+  encoding: FEAT
+  statement: Players sprinting during a stoppage (celebration, running to take a quick throw, protests).
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Sprint without the ball moving is not play".'
+- id: T1
+  tier: CLUE
+  encoding: FEAT
+  statement: The team with the ball is wider and deeper; the team without it is compact.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: T2
+  tier: CLUE
+  encoding: FEAT
+  statement: The defending team's back line and keeper retreat towards their own goal; the attacking team's
+    keeper stands high.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: T3
+  tier: STRONG
+  encoding: EVENT
+  statement: 'At a turnover the collective direction of travel flips within one to two seconds: the team
+    that won it accelerates forwards and spreads, the team that lost it turns and runs back.'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: T4
+  tier: CLUE
+  encoding: FEAT
+  statement: Opponents converge on the ball carrier. The point several players of one team are closing
+    on is where the ball is, and the player there who belongs to the other team has it.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: T5
+  tier: STRONG
+  encoding: STATE
+  statement: If the ball was with team X before a gap, is with team X after it, and T3 saw no flip, team
+    X had it throughout.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Holding (free)".'
+- id: T6
+  tier: STRONG
+  encoding: SNAP
+  statement: If the ball was with X before a gap and with Y after it, the switch is at the T3 flip inside
+    the gap; with no clear flip, just before the ball reappears with Y.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: T7
+  tier: STRONG
+  encoding: FEAT
+  statement: Shape measures jump when a tracked player drops out. Use medians and trimmed ranges, and
+    pass the tracked-player count to the model.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: T8
+  tier: STRONG
+  encoding: FEAT
+  statement: Two slots of one team within about half a metre are one player counted twice.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Merge before computing anything".'
+- id: T9
+  tier: CLUE
+  encoding: FEAT
+  statement: Both teams walking with no direction of travel and no pressing means a stoppage, not a possession.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: B1
+  tier: LAW
+  encoding: EVENT
+  statement: A ball cannot move faster than about 40 m/s. Faster jumps are tracking errors.
+  function: pipeline.ball.clean.reject_jumps
+  params:
+    max_speed_mps: 40.0
+    jump_slack_m: 1.0
+    min_piece_frames: 5
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: synthetic tests pass; no bench truth
+    for false detections'
+- id: B2
+  tier: CLUE
+  encoding: FEAT
+  statement: A "ball" that sits exactly still on a pitch marking while players run elsewhere is probably
+    a false detection.
+  function: pipeline.ball.clean.static_marking_suspects
+  params:
+    still_mps: 0.5
+    marking_radius_m: 1.0
+    marking_still_s: 2.0
+    marking_clear_m: 3.0
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: 0 suspects on SG3 and on the match'
+- id: B3
+  tier: STRONG
+  encoding: EVENT
+  statement: Gaps shorter than about half a second inside a straight pass can be filled by interpolation;
+    longer gaps are left empty and marked.
+  function: pipeline.ball.clean.fill_gaps
+  params:
+    max_fill: 12
+    always_fill: 2
+    fill_max_angle_deg: 25
+    fill_speed_ratio: 2.0
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: match: fills 0.02 % of graded frames
+    (gaps there are few and long)'
+- id: B4
+  tier: STRONG
+  encoding: EVENT
+  statement: A sudden change of ball speed or direction next to a player is a touch. Without a player
+    within about 2 m it is a bounce or an error.
+  function: pipeline.events.touch.touches
+  params:
+    param_sets: pipeline.events.touch.PARAM_SETS
+    default_set: w7
+    w7:
+      window_frames: 7
+      min_points: 4
+      dv_floor_mps: 3.0
+      noise_k: 4.0
+      angle_deg: 25
+      radius_m: 2.0
+      player_window_frames: 1
+      team_at: min
+      angle_weight: 0.1
+    w15s:
+      window_frames: 15
+      min_points: 6
+      dv_floor_mps: 3.0
+      noise_k: 1.75
+      angle_deg: 25
+      radius_m: 2.0
+      player_window_frames: 6
+      team_at: peak
+      angle_weight: 0.0
+    radius_scaled_by_alignment: true
+  status: measured
+  bench_precision: 0.866
+  bench_coverage: 0.709
+  notes: 'T-34 (P-17b, 14 Nov). Two named parameter sets, chosen explicitly with the events stage option
+    --touch-set (default w7, so every existing version reproduces). w7 is for a sharp-kick ball, w15s for
+    a low-pass ball like the competition match''s. bench_precision and bench_coverage are w15s on the
+    v3 (smoothed) level roots, pooled over 3 games and 3 levels, one to one within 10 frames against
+    Metrica event touches on graded frames (precision is a lower bound: dribble touches are not in the
+    event data). w15s smoothed by level P/R: low 0.888/0.755, match 0.871/0.718, high 0.834/0.648; on
+    the legacy2 (sharp) roots 0.849/0.821. w7 on the smoothed roots 0.804/0.264, on legacy2 0.890/0.816.
+    Precision under 0.9 for a STRONG rule: the decoder does not read a touch as a possession change by
+    itself (P13); tier left for the lead. Measurement: a full parameter sweep; synthetic tests:
+    tests/pipeline/test_touch_smoothed_ball.py and test_ball_events_scenes.py. Earlier (T-3): SG3 clean
+    P 0.953 R 0.927, noisy P 0.925 R 0.758 at 5 frames.
+    T-38 (15 Nov): a third set that undid the low-pass before reading kicks (deconvolution) was
+    measured and not adopted; it is not in this repository.'
+- id: B5
+  tier: STRONG
+  encoding: EVENT
+  statement: A ball moving in a straight line at more than about 8 m/s with no player within 2 m is in
+    flight between players, whatever is nearest.
+  function: pipeline.events.touch.flights
+  params:
+    flight_mps: 8.0
+    radius_m: 2.0
+    min_frames: 5
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Merged from pipeline/events/registry_update.yaml (signal-engineer, T-3). Bench: Metrica Sample
+    Game 3 only; numbers on clean tracking (upper bound). status: not measured separately'
+- id: B6
+  tier: CLUE
+  encoding: FEAT
+  statement: The ball being in the air is not visible in 2-D. Long kicks that slow smoothly and land near
+    a cluster are aerial; the first touch after them is often a header (P9).
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: G1
+  tier: STRONG
+  encoding: COST
+  statement: 'BUILD UP, PROGRESSION, CREATING CHANCES, BALL IN FINAL THIRD, BALL IN THE BOX, PLAYERS IN
+    THE BOX, LONG BALL with team T: T has the ball if the ball is live.'
+  function: pipeline.tagging.votes.code_votes
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Attacking codes vote for the tagged team over the whole interval (vote_<code> columns, int8 +1 H / -1 A). LONG BALL handled by G9. Overlapping opposite instances of one code cancel. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: G2
+  tier: STRONG
+  encoding: COST
+  statement: 'DEFENDING IN ATTACKING / MIDDLE / DEFENSIVE THIRD with team T: the other team has the ball
+    if it is live.'
+  function: pipeline.tagging.votes.code_votes
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'DEFENDING IN ... THIRD votes for the other team. Flip-if-below-half is read from the agreement table, not applied in code. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: G3
+  tier: STRONG
+  encoding: COST
+  statement: Phase tags say nothing about live versus dead. PLAYERS IN THE BOX and BALL IN FINAL THIRD
+    can cover the wait before a corner or free kick.
+  function: pipeline.tagging.votes.frame_arrays
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Tags never vote on D, except G5 to G7". By construction: phase votes are H versus A only and no tag array encodes D except restart_window (G5) and goal_hint (G6). The decoder must keep it so. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: G4
+  tier: STRONG
+  encoding: COST
+  statement: ATTACKING TRANSITION (T) starts just after T won the ball; DEFENSIVE TRANSITION (T) just
+    after T lost it.
+  function: pipeline.tagging.votes.turnover_hints
+  params: {turnover_hint_s: 2.0}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'turnover_hint_to (0 H, 1 A, -1 none or both) on [start - 2 s, start) of each transition tag. ATTACKING / DEFENSIVE TRANSITION also vote (vote_attacking_transition, vote_defensive_transition). No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: G5
+  tier: STRONG
+  encoding: COST
+  statement: 'SET PIECES: a restart happens inside the tagged window (L5) and the tagged team takes it
+    (R14).'
+  function: pipeline.tagging.votes.restart_windows
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'restart_window, restart_type, restart_team (-1 for throw-ins and where windows disagree). No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: G6
+  tier: STRONG
+  encoding: EVENT
+  statement: 'GOALS (T): a stoppage begins near the tag and the other team kicks off. The file has four
+    goal tags; do not assume all four are real. Require the kick-off formation (R6) to follow.'
+  function: pipeline.tagging.votes.goal_hints
+  params: {goal_pad_s: 2.0}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'goal_hint over the tag widened by 2 s each side; goal_conceding_team = the other team (R13). Kick-off-formation confirmation (R6) is left to the decoder side. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: G7
+  tier: STRONG
+  encoding: COST
+  statement: Fewer than half of real restarts are tagged (59 tags against 90 to 110 expected). No tag
+    means nothing.
+  function: pipeline.tagging.votes.frame_arrays
+  params: {}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Never penalise D for lacking a tag". By construction: an untagged frame holds 0 / -1 / False / empty only (tested). The decoder must not penalise D for lacking a tag. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: G8
+  tier: STRONG
+  encoding: SNAP
+  statement: Tag edges are accurate to about a second. Never snap a boundary to a tag edge.
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: G9
+  tier: CLUE
+  encoding: COST
+  statement: 'LONG BALL (T): T has it at the start; the end is a contest (P9, P14).'
+  function: pipeline.tagging.votes.code_votes
+  params: {long_ball_vote_s: 1.0}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'LONG BALL votes for the tagged team in its first second only. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: G10
+  tier: METHOD
+  encoding: METHOD
+  statement: Each code's weight is its measured agreement with confident tracking frames on this match,
+    computed by code and reported per code, never per instance.
+  function: pipeline.tagging.agreement.run
+  params: {core_s: 2.0, set_piece_tol_s: 1.0, change_reach_s: 5.0, long_stoppage_s: 30.0, goal_follow_s: 30.0,
+    a_min: 0.75, lambda: 0.5, w_cap: 1.1, gate_base: 0.70, gate_min: 0.10, lag_gate_frames: 15,
+    lag_min_matched: 5}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+  notes: 'Encoding mapped from the rulebook wording: "Method". P-20 gate (T-12d): rule 3 is per code (lag_filtered_kept): a kept code stays only if its own median start-edge lag is measured on at least lag_min_matched edges and is at most lag_gate_frames; unmeasurable codes are dropped; the gate value is recomputed on the survivors (gate_after_lag_<a>). The pooled lag row is kept for comparability only. Tests: tests/pipeline/test_tagging_gate.py, test_tagging_lag_rule.py. Reference: core frames of a decoded version (--ref-version) or pseudo-labels (--ref pseudo, T-37a). No weights applied yet: tag_vote is the unweighted sign. No bench equivalent (bench games have no Smart Tagging); judged on the match only through the per-code agreement table (G10, tagging stage with --agreement). Synthetic tests: tests/pipeline/test_tagging.py, test_tagging_agreement.py.'
+- id: A1
+  tier: CASE
+  encoding: TEST
+  statement: 'Opponent nearest the ball for a few frames in the middle of a possession (looks like: A
+    turnover). Decide with: Was there a touch (B4)? Did the ball then travel with him (P1) or to his team-mate
+    (P2)? If neither within about a second, hold'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A2
+  tier: CASE
+  encoding: TEST
+  statement: 'Ball missing 3 s, same team either side (looks like: Could be anything). Decide with: T5:
+    hold'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A3
+  tier: CASE
+  encoding: TEST
+  statement: 'Ball missing 5 s, other team after (looks like: Late switch). Decide with: T6: place at
+    the shape flip'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A4
+  tier: CASE
+  encoding: TEST
+  statement: 'Ball vanishes near the touchline, reappears 10 s later at the same place (looks like: Occlusion
+    or throw-in). Decide with: D3, slow-down, a still player on the line (R1) → D between, restart to
+    the team per R8'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A5
+  tier: CASE
+  encoding: TEST
+  statement: 'Cross into the box, ball lost, then seen with the keeper (looks like: Attack continuing).
+    Decide with: P3: change at the gather; if the ball then stays still with him, P22 not D'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A6
+  tier: CASE
+  encoding: TEST
+  statement: 'Cross into the box, ball lost, players slow, both teams reorganise (looks like: Keeper hold
+    or foul or goal kick). Decide with: Still ball in the goal area with opponents leaving the area →
+    goal kick (R2, D). Ball with a deep defender and no formation → keeper hold (live). Ball at centre
+    with everyone in own half next → goal'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A7
+  tier: CASE
+  encoding: TEST
+  statement: 'Shot, ball lost (looks like: Goal, save, wide, block). Decide with: Kick-off formation follows
+    → goal. Corner formation → saved or blocked wide, corner. Goal-kick formation → wide. None → live,
+    hold until control'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A8
+  tier: CASE
+  encoding: TEST
+  statement: 'Header duel after a long ball, then a loose ball (looks like: Turnover to the header''s
+    team). Decide with: P17: the header winner''s team has it from just before the header, whoever collects next
+    (reviewer convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A9
+  tier: CASE
+  encoding: TEST
+  statement: 'Tackle, ball squirts loose, original team picks it up (looks like: Turnover and back). Decide
+    with: P8: no change'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A10
+  tier: CASE
+  encoding: TEST
+  statement: 'Tackle, tackler''s team plays one pass and loses it (looks like: Blip). Decide with: P2
+    satisfied → it was a real short possession (S9)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A11
+  tier: CASE
+  encoding: TEST
+  statement: 'Defender hoofs it out for a throw (looks like: Defender''s possession then D). Decide with:
+    P10, P19: the clearing team has it from the clearance, then D; restart to the attackers (reviewer
+    convention, 14 Nov)'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A12
+  tier: CASE
+  encoding: TEST
+  statement: 'Players stop but the ball rolls on with one player chasing (looks like: Offside or foul,
+    or a tired phase). Decide with: D7: stop of the attackers plus a still ball at a free-kick spot afterwards
+    → D from the stop'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A13
+  tier: CASE
+  encoding: TEST
+  statement: 'Ball still on the edge of the box, a line of defenders 9 m away (looks like: Free kick pending).
+    Decide with: R4: D until the kick, restart to the non-wall team'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A14
+  tier: CASE
+  encoding: TEST
+  statement: 'Ball still in the centre circle (looks like: Kick-off or a midfielder standing on it). Decide
+    with: R6 formation → kick-off, D before; otherwise P23'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A15
+  tier: CASE
+  encoding: TEST
+  statement: 'Ball "outside" the far touchline for a few frames then back in play at speed (looks like:
+    Out of play). Decide with: D2: projection artefact, hold'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A16
+  tier: CASE
+  encoding: TEST
+  statement: 'Everyone walking for 60 s, some players near the benches (looks like: Slow play). Decide
+    with: D10: D throughout'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A17
+  tier: CASE
+  encoding: TEST
+  statement: 'Quick free kick: players stop for 2 s then play (looks like: Nothing happened). Decide with:
+    D5 then L1 with a short D; allowed by S10'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A18
+  tier: CASE
+  encoding: TEST
+  statement: 'Advantage played after a foul, one player down (looks like: Stoppage). Decide with: D6:
+    no collective slow-down, ball keeps moving with a team → live'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A19
+  tier: CASE
+  encoding: TEST
+  statement: 'Penalty saved and held (looks like: Attack continuing). Decide with: R5 restart to attackers,
+    then P3 change to the keeper'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A20
+  tier: CASE
+  encoding: TEST
+  statement: 'Goal straight from the kick-off pass back, long wait (looks like: —). Decide with: R6, S5'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A21
+  tier: CASE
+  encoding: TEST
+  statement: 'Back-pass to the keeper who dwells on it (looks like: Stoppage). Decide with: P23: live,
+    same team'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A22
+  tier: CASE
+  encoding: TEST
+  statement: 'Ball boy returns the ball quickly, throw taken while the tracker shows the ball outside
+    (looks like: Still dead). Decide with: L2 and L4: formation break dates the restart'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A23
+  tier: CASE
+  encoding: TEST
+  statement: 'Two candidate restart teams disagree (tag says H, last touch says H touched it last) (looks
+    like: —). Decide with: Law beats tag for throw-ins and corners (R8, R10); tag beats a weak last-touch
+    detection when the ball was missing at the exit'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null
+- id: A24
+  tier: CASE
+  encoding: TEST
+  statement: 'Drop ball (looks like: Odd restart). Decide with: R7; rare, low priority'
+  function: ''
+  params: {}
+  status: planned
+  bench_precision: null
+  bench_coverage: null

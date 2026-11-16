@@ -1,0 +1,37 @@
+# Match data and anything derived from it must never be committed
+data/
+MTAH Data/
+MTAH*/
+# Setup note with the team's private download link
+MTAH 2027*.md
+artifacts/
+bench_data/
+submissions/
+review/local/
+reports/
+*.mp4
+BAR-ATH_*
+!evaluation/gt/BAR-ATH_possession_gt_public.csv
+!evaluation/gt/BAR-ATH_possession_gt_public_meta.json
+*_possession_gt.csv
+*_possession_gt_meta.json
+*_possession_gt_reference.csv
+possession_by_frame.pkl
+evaluation/reports/
+evaluation/scoreboard.csv
+*.zip
+*.gzip
+*.tar*
+*.pl3container
+evaluation/results/*.csv
+!evaluation/results/baseline_*.csv
+
+# Local
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Rebuildable analysis cache (bench only, large)
+analysis/out/cache/

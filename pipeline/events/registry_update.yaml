@@ -1,0 +1,142 @@
+# Registry updates from signal-engineer (T-3), same schema as pipeline/rules/registry.yaml.
+# pipeline/rules/ belongs to restart-engineer: merge these entries over the matching IDs there.
+# Bench numbers: Metrica Sample Game 3 only. bench_precision / bench_coverage are on the CLEAN
+# tracking (an upper bound); the match-like noisy copy (bench.noise level "match", being rebuilt)
+# is given in each comment. Measured by pipeline.events.measure against the game's event data
+# (exits, touches) and bench truth.csv (control).
+
+- id: B1
+  tier: LAW
+  encoding: EVENT
+  statement: A ball cannot move faster than about 40 m/s. Faster jumps are tracking errors.
+  function: pipeline.ball.clean.reject_jumps
+  params: {max_speed_mps: 40.0, jump_slack_m: 1.0, min_piece_frames: 5}
+  status: implemented     # synthetic tests pass; no bench truth for false detections
+  bench_precision: null
+  bench_coverage: null
+- id: B2
+  tier: CLUE
+  encoding: FEAT
+  statement: A "ball" that sits exactly still on a pitch marking while players run elsewhere is probably a false detection.
+  function: pipeline.ball.clean.static_marking_suspects
+  params: {still_mps: 0.5, marking_radius_m: 1.0, marking_still_s: 2.0, marking_clear_m: 3.0}
+  status: implemented     # 0 suspects on SG3 and on the match
+  bench_precision: null
+  bench_coverage: null
+- id: B3
+  tier: STRONG
+  encoding: EVENT
+  statement: Gaps shorter than about half a second inside a straight pass can be filled by interpolation; longer gaps are left empty and marked.
+  function: pipeline.ball.clean.fill_gaps
+  params: {max_fill: 12, always_fill: 2, fill_max_angle_deg: 25, fill_speed_ratio: 2.0}
+  status: implemented     # match: fills 0.02 % of graded frames (gaps there are few and long)
+  bench_precision: null
+  bench_coverage: null
+- id: B4
+  tier: STRONG
+  encoding: EVENT
+  statement: A sudden change of ball speed or direction next to a player is a touch. Without a player within about 2 m it is a bounce or an error.
+  function: pipeline.events.touch.touches
+  params: {window_frames: 7, dv_floor_mps: 3.0, noise_k: 4.0, angle_deg: 25, radius_m: 2.0, radius_scaled_by_alignment: true}
+  status: measured        # noisy: P 0.925 R 0.758 team 0.969 (tol 5 frames)
+  bench_precision: 0.953  # tol 5 frames; lower bound: dribble touches are not in the event data
+  bench_coverage: 0.927
+- id: B5
+  tier: STRONG
+  encoding: EVENT
+  statement: A ball moving in a straight line at more than about 8 m/s with no player within 2 m is in flight between players, whatever is nearest.
+  function: pipeline.events.touch.flights
+  params: {flight_mps: 8.0, radius_m: 2.0, min_frames: 5}
+  status: implemented     # not measured separately
+  bench_precision: null
+  bench_coverage: null
+- id: D1
+  tier: LAW
+  encoding: EVENT
+  statement: The ball is out when all of it crosses a touchline or goal line, on the ground or in the air.
+  function: pipeline.events.exits.exits
+  params: {margin_m: 0.3}
+  status: measured        # line agreement 0.986 clean, 0.908 noisy
+  bench_precision: 0.973
+  bench_coverage: 0.986
+- id: D2
+  tier: STRONG
+  encoding: EVENT
+  statement: A tracked ball outside the lines is evidence of D only if it stays out for several frames or disappears while out.
+  function: pipeline.events.exits.exits
+  params: {persist_frames: 8, vanish_frames: 25, bridge_frames: 5, entry_frames: 12, persist_depth_m: 1.0, feet_m: 0.75, feet_share: 0.75, trap_max_frames: 25, trap_return_frames: 12, trap_speed_mps: 8.0, reappear_max_frames: 75}
+  status: measured        # all exit kinds together: noisy P 0.915 R 0.903; last touch team 0.915 clean, 0.785 noisy
+  bench_precision: 0.973
+  bench_coverage: 0.986
+- id: D3
+  tier: STRONG
+  encoding: EVENT
+  statement: A ball last seen within a few metres of a line, moving outwards fast enough to cross it, that then goes missing has probably gone out.
+  function: pipeline.events.exits._extrapolated
+  params: {max_dist_m: 5.0, min_out_mps: 2.0, max_time_s: 1.0, min_gap_frames: 50}
+  status: measured        # clean 2 of 4 match an exit, the other 2 fall on fouls; noisy 3 of 8
+  bench_precision: 0.5    # below 0.9: demote to CLUE (COST) until measured on more games
+  bench_coverage: null
+- id: R8
+  tier: LAW
+  encoding: EVENT
+  statement: Last team to touch before the ball crosses a line loses the restart, except a goal.
+  function: pipeline.events.exits._last_touch
+  params: {last_touch_s: 10.0, last_near_m: 2.0, contact_fallback: false}
+  status: measured        # last_touch_team agreement on matched exits: 0.915 clean, 0.785 noisy
+  bench_precision: 0.915
+  bench_coverage: 0.986
+- id: P1
+  tier: STRONG
+  encoding: EVENT
+  statement: A player keeps the ball close (within about 1.5 m) and moving with him for a sustained time with no opponent closer.
+  function: pipeline.events.possession.carries
+  params: {carry_m: 1.5, carry_tight_m: 1.0, agree_mps: 4.0, jump_m: 1.0, carry_min_s: 0.4, carry_gap: 3}
+  status: implemented     # measured only through control below; carry_min_s 0.4 chosen on the bench (start 0.6)
+  bench_precision: null
+  bench_coverage: null
+- id: P2
+  tier: STRONG
+  encoding: EVENT
+  statement: A team makes two touches in a row by two different players (a completed pass) with no opponent touch between.
+  function: pipeline.events.possession.passes
+  params: {pass_diff_m: 3.0, pass_min_m: 3.0, pass_min_frames: 3, pass_max_s: 5.0, run_frames: 10}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null
+- id: P4
+  tier: STRONG
+  encoding: EVENT
+  statement: A player receives a pass from an opponent cleanly and plays on (first touch then carry or pass).
+  function: pipeline.events.possession.controls
+  params: {seq_gap_s: 3.0}
+  status: measured        # live switches, +/-10 frames, team must agree. noisy: P 0.466 R 0.336
+  bench_precision: 0.576  # far below 0.9: CLUE (small switch cost), not a pseudo-label
+  bench_coverage: 0.506   # by length: <1.5 s 0.27, 1.5-4 s 0.41, >4 s 0.59
+- id: P7
+  tier: LAW
+  encoding: EVENT
+  statement: A deflection, one touch, the ball keeps most of its speed and carries on to the original team or out of play.
+  function: pipeline.events.possession.deflections
+  params: {window_s: 2.0, keep: 0.5, follow_s: 1.0}
+  status: implemented     # synthetic only; no bench truth for deflections
+  bench_precision: null
+  bench_coverage: null
+- id: P13
+  tier: STRONG
+  encoding: EVENT
+  statement: A dribbler pushing the ball several metres ahead, or a defender shielding it; nearest player alone never triggers a switch.
+  function: pipeline.events.possession.passes
+  params: {}
+  status: implemented     # dribble-push scene: no defender touch, no self-pass
+  bench_precision: null
+  bench_coverage: null
+- id: D12
+  tier: CLUE
+  encoding: FEAT
+  statement: The ball going missing is evidence of D that depends on context.
+  function: pipeline.features.missing_context
+  params: {loss_radius_m: 3.0}
+  status: implemented
+  bench_precision: null
+  bench_coverage: null

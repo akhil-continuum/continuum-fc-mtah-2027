@@ -1,0 +1,159 @@
+{
+ "columns": [
+  "ctrl_last",
+  "ctrl_next",
+  "carry",
+  "pass",
+  "touch_last",
+  "near",
+  "territory",
+  "spread"
+ ],
+ "dead": {
+  "bias": -0.693,
+  "fit": {
+   "bias": "held at log(1/2)",
+   "fit_level": "match",
+   "l2": 0.002,
+   "objective": "tune._fit",
+   "step": 5,
+   "truth": "D frames (same in every truth)"
+  },
+  "terms": [
+   "miss",
+   "miss_len",
+   "miss_line",
+   "miss_crowd",
+   "out",
+   "exit",
+   "pre_kickoff",
+   "form_kickoff",
+   "slow",
+   "slow_dip",
+   "still",
+   "moving",
+   "players_low"
+  ],
+  "weights": {
+   "all": {
+    "exit": 3.019,
+    "form_kickoff": 1.978,
+    "miss": 0.461,
+    "miss_crowd": 0.0,
+    "miss_len": 1.941,
+    "miss_line": 1.098,
+    "moving": -2.868,
+    "out": 2.724,
+    "players_low": 0.0,
+    "pre_kickoff": 8.0,
+    "slow": 3.236,
+    "slow_dip": 0.0,
+    "still": 1.46
+   },
+   "logo": {
+    "metrica_g1": {
+     "exit": 3.038,
+     "form_kickoff": 1.975,
+     "miss": 0.432,
+     "miss_crowd": -0.144,
+     "miss_len": 2.021,
+     "miss_line": 1.036,
+     "moving": -3.047,
+     "out": 2.676,
+     "players_low": 0.0,
+     "pre_kickoff": 8.0,
+     "slow": 3.038,
+     "slow_dip": 0.0,
+     "still": 1.309
+    },
+    "metrica_g2": {
+     "exit": 2.986,
+     "form_kickoff": 1.973,
+     "miss": 0.579,
+     "miss_crowd": 0.0,
+     "miss_len": 1.759,
+     "miss_line": 1.072,
+     "moving": -2.813,
+     "out": 2.683,
+     "players_low": 0.0,
+     "pre_kickoff": 8.0,
+     "slow": 3.417,
+     "slow_dip": 0.0,
+     "still": 1.496
+    },
+    "metrica_g3": {
+     "exit": 3.026,
+     "form_kickoff": 1.985,
+     "miss": 0.399,
+     "miss_crowd": 0.0,
+     "miss_len": 2.062,
+     "miss_line": 1.176,
+     "moving": -2.752,
+     "out": 2.81,
+     "players_low": 0.0,
+     "pre_kickoff": 8.0,
+     "slow": 3.238,
+     "slow_dip": 0.0,
+     "still": 1.573
+    }
+   }
+  }
+ },
+ "fit": {
+  "bench": "smoothed (noise model v3, T-33)",
+  "fit_level": "match",
+  "intercept": false,
+  "l2": 0.002,
+  "objective": "tune._fit (bounded, signs, L2 towards defaults)",
+  "step": 5,
+  "task": "T-35",
+  "touch_set": "w15s",
+  "truth": "truth_labels.csv"
+ },
+ "model": "rule_w1",
+ "variant": "rule_v1_terms",
+ "weights": {
+  "all": {
+   "carry": 0.695,
+   "ctrl_last": 0.707,
+   "ctrl_next": 0.848,
+   "near": 0.668,
+   "pass": 0.511,
+   "spread": 1.464,
+   "territory": -0.431,
+   "touch_last": 0.738
+  },
+  "logo": {
+   "metrica_g1": {
+    "carry": 0.645,
+    "ctrl_last": 0.629,
+    "ctrl_next": 0.772,
+    "near": 0.645,
+    "pass": 0.528,
+    "spread": 1.565,
+    "territory": -0.55,
+    "touch_last": 0.719
+   },
+   "metrica_g2": {
+    "carry": 0.71,
+    "ctrl_last": 0.678,
+    "ctrl_next": 0.905,
+    "near": 0.622,
+    "pass": 0.508,
+    "spread": 1.501,
+    "territory": -0.496,
+    "touch_last": 0.739
+   },
+   "metrica_g3": {
+    "carry": 0.74,
+    "ctrl_last": 0.836,
+    "ctrl_next": 0.868,
+    "near": 0.736,
+    "pass": 0.51,
+    "spread": 1.299,
+    "territory": -0.224,
+    "touch_last": 0.74
+   }
+  }
+ }
+}

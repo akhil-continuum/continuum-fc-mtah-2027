@@ -1,0 +1,56 @@
+# Registry updates from frame-modeler (T-5a), same schema as pipeline/rules/registry.yaml.
+# pipeline/rules/ belongs to restart-engineer: merge these over the matching IDs there (append the
+# rule_v1 term to `function`/`params` where the ID already has a detector).
+# Each term is a FEAT/CLUE in the rule scorer pipeline/models/rule_scorer.py (rule_v1); the
+# weight is the bench-chosen log-odds in pipeline/models/rule_params.py. Bench numbers are
+# per-term likelihood fits on metrica_g{1,2,3}_match (rebuilt noise), not detector precision.
+
+- id: D12
+  tier: CLUE
+  encoding: FEAT
+  statement: The ball going missing is evidence of D that depends on context.
+  function: pipeline.models.terms.dead_terms   # terms miss, miss_line (D3), miss_crowd (P25)
+  params: {line_near_m: 5.0, line_out_mps: 5.0, crowd_full: 4}
+  status: in_use
+- id: D13
+  tier: STRONG
+  encoding: FEAT
+  statement: A missing ball for longer than a pass or cross can last, with slow players, is very likely D.
+  function: pipeline.models.terms.dead_terms   # term miss_len = clip(log2(gap / 4 s), +-3) / 3
+  params: {gap_mid_s: 4.0, gap_len_clip: 3.0}
+  status: in_use       # used as a FEAT; not yet a PSEUDO rule (precision not measured as one)
+- id: D5
+  tier: CLUE
+  encoding: FEAT
+  statement: Collective slow-down (jitter-corrected RMS player speed over +-1 s; dip against +-8 s).
+  function: pipeline.models.terms.dead_terms   # terms slow, slow_dip
+  params: {speed_ref_mps: 1.6, speed_scale_mps: 0.8, speed_floor_q: 2.0, dip_ctx_s: 8.0}
+  status: in_use       # slow_dip weight fitted to 0 on the bench (kept, weight 0)
+- id: D9
+  tier: STRONG
+  encoding: FEAT
+  statement: Stationary seen ball (share of +-1 s under 0.7 m/s) leans D; trap P23 keeps it a clue.
+  function: pipeline.models.terms.dead_terms   # term still; live counterpart term moving
+  params: {still_mps: 0.7, moving_mps: 3.0}
+  status: in_use
+- id: T1
+  tier: CLUE
+  encoding: FEAT
+  statement: The team with the ball is wider and deeper (median distance to team median, +-1 s).
+  function: pipeline.models.terms.team_terms   # term spread
+  params: {spread_scale_m: 4.0}
+  status: in_use
+- id: T2
+  tier: CLUE
+  encoding: FEAT
+  statement: Both teams' centroids pushed towards one goal (territory).
+  function: pipeline.models.terms.team_terms   # term territory
+  params: {}
+  status: in_use       # weight fitted near 0 on the bench
+- id: P13
+  tier: STRONG
+  encoding: FEAT
+  statement: Nearest-player team (aligned players, outside flights, within 3 m) is a weak per-frame clue only.
+  function: pipeline.models.terms.team_terms   # term near
+  params: {near_scale_m: 2.0, near_max_m: 3.0, near_half_s: 0.5}
+  status: in_use
